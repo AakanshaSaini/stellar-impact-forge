@@ -1,13 +1,19 @@
 import { useState } from "react";
-import { ArrowUpDown, DollarSign, Star, Zap, Gift } from "lucide-react";
+import { ArrowUpDown, DollarSign, Star, Zap, Gift, Wallet } from "lucide-react";
 import { EnhancedButton } from "@/components/ui/enhanced-button";
 import { CryptoCard } from "@/components/crypto-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useWallet } from "@/contexts/WalletContext";
+import { createDonationTransaction, submitTransaction, parseXLMAmount } from "@/lib/stellar-transactions";
+import { toast } from "@/hooks/use-toast";
 
 export function DonationScreen() {
   const [donationAmount, setDonationAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { isConnected, publicKey, signTransaction, network } = useWallet();
+  
   const [selectedNgo] = useState({
     name: "Education First",
     logo: "🎓",
@@ -154,14 +160,83 @@ export function DonationScreen() {
           </div>
         </CryptoCard>
 
+        {/* Wallet Connection Notice */}
+        {!isConnected && (
+          <CryptoCard className="p-4 border-yellow-500/20 bg-yellow-500/5">
+            <div className="flex items-center space-x-3">
+              <Wallet className="h-5 w-5 text-yellow-500" />
+              <div>
+                <h4 className="font-semibold text-sm">Wallet Required</h4>
+                <p className="text-xs text-muted-foreground">
+                  Please connect your Freighter wallet to make donations
+                </p>
+              </div>
+            </div>
+          </CryptoCard>
+        )}
+
         {/* Donate Button */}
         <EnhancedButton
           variant="neon"
           size="xl"
           className="w-full"
-          disabled={!donationAmount}
+          disabled={!donationAmount || !isConnected || isProcessing}
+          onClick={async () => {
+            if (!isConnected) {
+              // This should not happen due to disabled state, but just in case
+              return;
+            }
+            
+            setIsProcessing(true);
+            try {
+              if (!publicKey) {
+                throw new Error('No public key available');
+              }
+
+              // Convert USD to XLM if needed
+              const xlmAmount = currency === "USD" 
+                ? (parseFloat(donationAmount) * conversionRate).toFixed(7)
+                : donationAmount;
+
+              // Convert to stroops for Stellar
+              const stroopsAmount = parseXLMAmount(xlmAmount);
+
+              // Create the donation transaction
+              const transaction = await createDonationTransaction({
+                amount: stroopsAmount,
+                destinationAddress: "GCNY5OXYSY4FKHOPT2SPOQZAOEIGXB5LBYW3HVU3OWSTQITS65M5RCNY", // Example NGO address
+                sourcePublicKey: publicKey,
+                memo: `Donation to ${selectedNgo.name}`,
+                network
+              });
+
+              // Sign the transaction with Freighter
+              const signedTransactionXDR = await signTransaction(transaction.toXDR());
+
+              // Submit the transaction
+              const result = await submitTransaction(signedTransactionXDR, network);
+
+              toast({
+                title: "Donation Successful!",
+                description: `Your donation of ${xlmAmount} XLM has been sent. Transaction: ${result.hash}`,
+              });
+
+              // Reset form
+              setDonationAmount("");
+              
+            } catch (error) {
+              console.error('Donation failed:', error);
+              toast({
+                title: "Donation Failed",
+                description: error instanceof Error ? error.message : "Failed to process donation",
+                variant: "destructive",
+              });
+            } finally {
+              setIsProcessing(false);
+            }
+          }}
         >
-          Donate Securely
+          {isProcessing ? "Processing..." : "Donate Securely"}
         </EnhancedButton>
 
         {/* Security Info */}

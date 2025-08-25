@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Home, Users, DollarSign, Trophy, Activity, Menu } from "lucide-react";
+import { Home, Users, DollarSign, Trophy, Activity, Menu, Wallet } from "lucide-react";
 import { EnhancedButton } from "@/components/ui/enhanced-button";
 import { cn } from "@/lib/utils";
+import { useWallet } from "@/contexts/WalletContext";
+import { formatPublicKey } from "@/lib/stellar-config";
 
 interface NavigationProps {
   activeScreen: string;
@@ -18,6 +20,7 @@ const navItems = [
 
 export function Navigation({ activeScreen, onScreenChange }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { isConnected, publicKey, network } = useWallet();
 
   return (
     <>
@@ -31,6 +34,18 @@ export function Navigation({ activeScreen, onScreenChange }: NavigationProps) {
           <Menu className="h-5 w-5" />
         </EnhancedButton>
       </div>
+
+      {/* Wallet Status Indicator */}
+      {isConnected && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="flex items-center space-x-2 bg-card/80 backdrop-blur-lg border border-white/10 rounded-2xl px-3 py-2">
+            <Wallet className="h-4 w-4 text-neon-green" />
+            <span className="text-sm text-muted-foreground">
+              {formatPublicKey(publicKey || '')} • {network}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Navigation Overlay */}
       {isOpen && (
